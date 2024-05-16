@@ -1,9 +1,9 @@
 # Eiyaro trading instructions (account management mode)
 This section focuses on users sending trades using Eiyaro's own account mode
 
-* [1. Build the deal](#1. Build the deal)
+* [1. Build the Transaction](#1.BuildtheTransaction)
 
-  [action profile](#action profile)
+  [action profile](#actionprofile)
   - [issue](#issue)
   - [spend_account](#spend_account)
   - [spend_account_unspent_output](#spend_account_unspent_output)
@@ -12,8 +12,8 @@ This section focuses on users sending trades using Eiyaro's own account mode
   - [retire](#retire)
 
   [estimate_handling_fee](#estimate_handling_fee)
-* [2, Sign Transaction](#2, Sign Transaction)
-* [3, submit transaction](#3, submit transaction)
+* [2, Sign Transaction](#2,SignTransaction)
+* [3, submit Transaction](#3,submittransaction)
 
 ## 1. build-transaction
 API interface build-transaction, code [api/transact.go#L117](https://github.com/EIYARO-Project/core/blob/main/api/transact.go#L117)
