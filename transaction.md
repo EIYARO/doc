@@ -1,7 +1,7 @@
 # Eiyaro trading instructions (account management mode)
 This section focuses on users sending trades using Eiyaro's own account mode
 
-* :: [1. Build the deal](#1. Build the deal)
+* [1. Build the deal](#1. Build the deal)
 
   [action profile](#action profile)
   - [issue](#issue)
