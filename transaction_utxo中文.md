@@ -12,7 +12,7 @@
 
 *注意事项*:
 
-以下步骤以及功能改造仅供参考，具体代码实现需要用户根据实际情况进行调试，具体可以参考单元测试案例代码[blockchain/txbuilder/txbuilder_test.go#L255](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/txbuilder_test.go#L255)
+以下步骤以及功能改造仅供参考，具体代码实现需要用户根据实际情况进行调试，具体可以参考单元测试案例代码[blockchain/txbuilder/txbuilder_test.go#L252](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/txbuilder_test.go#L252)
 
 ## 1.创建私钥和公钥
 该部分功能可以参考代码[crypto/ed25519/chainkd/util.go#L11](https://github.com/EIYARO-Project/core/blob/master/crypto/ed25519/chainkd/util.go#L11)，可以通过 `NewXKeys(nil)` 创建主私钥和主公钥 
@@ -27,7 +27,7 @@ func NewXKeys(r io.Reader) (xprv XPrv, xpub XPub, err error) {
 ```
 
 ## 2.根据公钥创建接收对象
-接收对象包含两种形式：`address`形式和`program`形式，两者是一一对应的，任选其一即可。其中创建单签地址参考代码[account/accounts.go#L267](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L267)进行相应改造为：
+接收对象包含两种形式：`address`形式和`program`形式，两者是一一对应的，任选其一即可。其中创建单签地址参考代码[account/accounts.go#L253](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L253)进行相应改造为：
 ```go
 func (m *Manager) createP2PKH(xpub chainkd.XPub) (*CtrlProgram, error) {
 	pubKey := xpub.PublicKey()
@@ -51,7 +51,7 @@ func (m *Manager) createP2PKH(xpub chainkd.XPub) (*CtrlProgram, error) {
 }
 ```
 
-创建多签地址参考代码[account/accounts.go#L294](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L294)进行相应改造为：(quorum指的是多签地址需要的验证的个数，比如说3-2多签地址，指的是3个主公钥，需要两个签名才能验证通过)
+创建多签地址参考代码[account/accounts.go#L276](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L276)进行相应改造为：(quorum指的是多签地址需要的验证的个数，比如说3-2多签地址，指的是3个主公钥，需要两个签名才能验证通过)
 ```go
 func (m *Manager) createP2SH(xpubs []chainkd.XPub, quorum int) (*CtrlProgram, error) {
 	derivedPKs := chainkd.XPubKeys(xpubs)
@@ -80,7 +80,7 @@ func (m *Manager) createP2SH(xpubs []chainkd.XPub, quorum int) (*CtrlProgram, er
 ```
 
 ## 3.找到可花费的utxo
-找到可花费的utxo，其实就是找到接收地址或接收`program`是你自己的`unspend_output`。其中utxo的结构为：（参考代码[account/reserve.go#L39](https://github.com/EIYARO-Project/core/blob/master/account/reserve.go#L39)）
+找到可花费的utxo，其实就是找到接收地址或接收`program`是你自己的`unspend_output`。其中utxo的结构为：
 ```go
 // UTXO describes an individual account utxo.
 type UTXO struct {
@@ -111,7 +111,7 @@ type UTXO struct {
 - `ControlProgram` utxo的接收program
 - `Address` utxo的接收地址
 
-上述这些utxo的字段信息可以从`get-block`接口返回结果的transaction中找到，其相关的结构体如下：（参考代码[api/block_retrieve.go#L26](https://github.com/EIYARO-Project/core/blob/master/api/block_retrieve.go#L26)）
+上述这些utxo的字段信息可以从`get-block`接口返回结果的transaction中找到，其相关的结构体如下：（参考代码[api/block_retrieve.go#L29](https://github.com/EIYARO-Project/core/blob/master/api/block_retrieve.go#L29)）
 ```go
 // BlockTx is the tx struct for getBlock func
 type BlockTx struct {
@@ -155,7 +155,7 @@ utxo跟get-block返回结果的字段对应关系如下：
 ## 4.通过`utxo`构造交易
 通过utxo构造交易就是使用spend_account_unspent_output的方式来花费指定的utxo。
 
-第一步，通过`utxo`构造交易输入`TxInput`和签名需要的数据信息`SigningInstruction`，该部分功能可以参考代码[account/builder.go#L169](https://github.com/EIYARO-Project/core/blob/master/account/builder.go#L169)进行相应改造为:
+第一步，通过`utxo`构造交易输入`TxInput`和签名需要的数据信息`SigningInstruction`，该部分功能可以参考代码[account/builder.go#L305](https://github.com/EIYARO-Project/core/blob/master/account/builder.go#L305)进行相应改造为:
 ```go
 // UtxoToInputs convert an utxo to the txinput
 func UtxoToInputs(xpubs []chainkd.XPub, quorum int， u *UTXO) (*types.TxInput, *txbuilder.SigningInstruction, error) {
@@ -213,7 +213,7 @@ func NewTxOutput(assetID bc.AssetID, amount uint64, controlProgram []byte) *TxOu
 ```
 
 ## 5.组合交易的input和output构成交易模板
-通过上面已经生成的交易信息构造交易`txbuilder.Template`，该部分功能可以参考[blockchain/txbuilder/builder.go#L92](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/builder.go#L92)进行改造为:
+通过上面已经生成的交易信息构造交易`txbuilder.Template`，该部分功能可以参考[blockchain/txbuilder/builder.go#L96](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/builder.go#L96)进行改造为:
 ```go
 type InputAndSigInst struct {
 	input *types.TxInput
@@ -244,7 +244,7 @@ func BuildTx(inputs []InputAndSigInst, outputs []*types.TxOutput) (*Template, *t
 ```
 
 ## 6.对构造的交易进行签名
-账户模型是根据密码找到对应的私钥对交易进行签名，这里用户可以直接使用私钥对交易进行签名，可以参考签名代码[blockchain/txbuilder/txbuilder.go#L82](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/txbuilder.go#L82)进行改造为:（以下改造仅支持单签交易，多签交易用户可以参照该示例进行改造）
+账户模型是根据密码找到对应的私钥对交易进行签名，这里用户可以直接使用私钥对交易进行签名，可以参考签名代码[blockchain/txbuilder/txbuilder.go#L88](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/txbuilder.go#L88)进行改造为:（以下改造仅支持单签交易，多签交易用户可以参照该示例进行改造）
 ```go
 // Sign will try to sign all the witness
 func Sign(tpl *Template, xprv chainkd.XPrv) error {
