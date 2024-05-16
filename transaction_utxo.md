@@ -1,21 +1,21 @@
-# Eiyaro交易说明（UTXO用户自己管理模式）
-该部分主要针对用户自己管理私钥和地址，并通过utxo来构建和发送交易。
+# Eiyaro Transaction Description (UTXO User Own Management Model)
+This section is for users to manage their own private keys and addresses, and to build and send transactions via utxo.
 
-* [1.创建私钥和公钥](#1.创建私钥和公钥)
-* [2.根据公钥创建接收对象](#2.根据公钥创建接收对象)
-* [3.找到可花费的`utxo`](#3.找到可花费的utxo)
-* [4.通过`utxo`构造交易](#4.通过utxo构造交易)
-* [5.组合交易的`input`和`output`构成交易模板](#5.组合交易的input和output构成交易模板)
-* [6.对构造的交易进行签名](#6.对构造的交易进行签名)
-* [7.提交交易上链](#7.提交交易上链)
+* [1. Create private and public keys](#1.Createprivateandpublickeys)
+* [2. Create receiving object based on public key](#2.Createreceivingobjectbasedonpublickey)
+* [3. find spendable `utxo`](#3.findspendableutxo)
+* [4. Construct transaction via `utxo`](#4.Constructtransactionviautxo)
+* [5. Combine `input` and `output` of a transaction to form a transaction template](#5.Combineinputandoutputofatransactiontoformatransactiontemplate)
+* [6. Sign the constructed transaction](#6.Signtheconstructedtransaction)
+* [7. Submit transaction for uploading](#7.Submittransactionforuploading)
 
 
-*注意事项*:
+*Note*.
 
-以下步骤以及功能改造仅供参考，具体代码实现需要用户根据实际情况进行调试，具体可以参考单元测试案例代码[blockchain/txbuilder/txbuilder_test.go#L252](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/txbuilder_test.go#L252)
+The following steps as well as functional transformation is for reference only, the specific code implementation needs to be debugged by the user according to the actual situation, you can refer to the unit test case code [blockchain/txbuilder/txbuilder_test.go#L252](https://github.com/EIYARO-Project/ core/blob/master/blockchain/txbuilder/txbuilder_test.go#L252)
 
-## 1.创建私钥和公钥
-该部分功能可以参考代码[crypto/ed25519/chainkd/util.go#L11](https://github.com/EIYARO-Project/core/blob/master/crypto/ed25519/chainkd/util.go#L11)，可以通过 `NewXKeys(nil)` 创建主私钥和主公钥 
+## 1. Create private and public keys
+This part of the function can refer to the code [crypto/ed25519/chainkd/util.go#L11](https://github.com/EIYARO-Project/core/blob/master/crypto/ed25519/chainkd/util.go# L11), you can create master private key and master public key by `NewXKeys(nil)`. 
 ```go
 func NewXKeys(r io.Reader) (xprv XPrv, xpub XPub, err error) {
 	xprv, err = NewXPrv(r)
@@ -26,8 +26,8 @@ func NewXKeys(r io.Reader) (xprv XPrv, xpub XPub, err error) {
 }
 ```
 
-## 2.根据公钥创建接收对象
-接收对象包含两种形式：`address`形式和`program`形式，两者是一一对应的，任选其一即可。其中创建单签地址参考代码[account/accounts.go#L253](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L253)进行相应改造为：
+## 2. Create a receive object based on the public key.
+Receiving object contains two forms: `address` form and `program` form, both are one-to-one correspondence, either one can be. Which create a single signature address reference code [account/accounts.go#L253](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L253) for the corresponding transformation for:
 ```go
 func (m *Manager) createP2PKH(xpub chainkd.XPub) (*CtrlProgram, error) {
 	pubKey := xpub.PublicKey()
@@ -51,7 +51,7 @@ func (m *Manager) createP2PKH(xpub chainkd.XPub) (*CtrlProgram, error) {
 }
 ```
 
-创建多签地址参考代码[account/accounts.go#L276](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L276)进行相应改造为：(quorum指的是多签地址需要的验证的个数，比如说3-2多签地址，指的是3个主公钥，需要两个签名才能验证通过)
+Create multi-signature address reference code [accounts/accounts.go#L276](https://github.com/EIYARO-Project/core/blob/master/account/accounts.go#L276) to be transformed accordingly as follows: (quorum means the is the number of verifications required for multi-signature address, for example, 3-2 multi-signature address, means 3 master public keys, two signatures are required to verify the pass)
 ```go
 func (m *Manager) createP2SH(xpubs []chainkd.XPub, quorum int) (*CtrlProgram, error) {
 	derivedPKs := chainkd.XPubKeys(xpubs)
@@ -79,8 +79,8 @@ func (m *Manager) createP2SH(xpubs []chainkd.XPub, quorum int) (*CtrlProgram, er
 }
 ```
 
-## 3.找到可花费的utxo
-找到可花费的utxo，其实就是找到接收地址或接收`program`是你自己的`unspend_output`。其中utxo的结构为：
+## 3. Finding spendable utxo
+Finding the spendable utxo is really about finding the receiving address or receiving `program` that is your own `unspend_output`. Where the structure of utxo is:
 ```go
 // UTXO describes an individual account utxo.
 type UTXO struct {
@@ -103,15 +103,15 @@ type UTXO struct {
 }
 ```
 
-涉及utxo构造交易的相关字段说明如下：
-- `SourceID` 前一笔关联交易的mux_id, 根据该ID可以定位到前一笔交易的output
-- `AssetID` utxo的资产ID
-- `Amount` utxo的资产数目
-- `SourcePos` 该utxo在前一笔交易的output的位置
-- `ControlProgram` utxo的接收program
-- `Address` utxo的接收地址
+The related fields involving utxo constructed transactions are described below:
+- `SourceID` The mux_id of the previous associated transaction, based on which the output of the previous transaction can be located
+- `AssetID` The asset ID of the utxo.
+- `Amount` The number of assets in the utxo.
+- `SourcePos` The position of the utxo in the output of the previous transaction.
+- `ControlProgram` The receiving program of the utxo.
+- `Address` The receiving address of the utxo.
 
-上述这些utxo的字段信息可以从`get-block`接口返回结果的transaction中找到，其相关的结构体如下：（参考代码[api/block_retrieve.go#L29](https://github.com/EIYARO-Project/core/blob/master/api/block_retrieve.go#L29)）
+Information about these fields of the utxo above can be found in the transaction that the `get-block` interface returns the result of, and its related structure is as follows: (refer to the code [api/block_retrieve.go#L29](https://github.com/EIYARO-Project/core)) /blob/master/api/block_retrieve.go#L29))
 ```go
 // BlockTx is the tx struct for getBlock func
 type BlockTx struct {
@@ -142,7 +142,7 @@ type AnnotatedOutput struct {
 }
 ```
 
-utxo跟get-block返回结果的字段对应关系如下：
+The correspondence between utxo and get-block return result fields is as follows:
 ```js
 `SourceID`       - `json:"mux_id"`
 `AssetID`        - `json:"asset_id"`
@@ -152,10 +152,10 @@ utxo跟get-block返回结果的字段对应关系如下：
 `Address`        - `json:"address,omitempty"`
 ```
 
-## 4.通过`utxo`构造交易
-通过utxo构造交易就是使用spend_account_unspent_output的方式来花费指定的utxo。
+## 4. Constructing transactions via `utxo`
+Constructing a transaction via utxo means spending the specified utxo using send_account_unspent_output.
 
-第一步，通过`utxo`构造交易输入`TxInput`和签名需要的数据信息`SigningInstruction`，该部分功能可以参考代码[account/builder.go#L305](https://github.com/EIYARO-Project/core/blob/master/account/builder.go#L305)进行相应改造为:
+The first step is to construct the transaction input `TxInput` and the data information needed for signing `SigningInstruction` through `utxo`, this part of the function can refer to the code [account/builder.go#L305] (https://github.com/EIYARO-Project/ core/blob/master/account/builder.go#L305) can be modified accordingly as follows.
 ```go
 // UtxoToInputs convert an utxo to the txinput
 func UtxoToInputs(xpubs []chainkd.XPub, quorum int， u *UTXO) (*types.TxInput, *txbuilder.SigningInstruction, error) {
@@ -193,8 +193,8 @@ func UtxoToInputs(xpubs []chainkd.XPub, quorum int， u *UTXO) (*types.TxInput, 
 }
 ```
 
-第二步，通过`utxo`构造交易输出`TxOutput`
-该部分功能可以参考代码[protocol/bc/types/txoutput.go#L20](https://github.com/EIYARO-Project/core/blob/master/protocol/bc/types/txoutput.go#L20):
+The second step is to construct the transaction output `TxOutput` by `utxo`
+This part of the function can be found in the code [protocol/bc/types/txoutput.go#L20](https://github.com/EIYARO-Project/core/blob/master/protocol/bc/types/txoutput.go# L20).
 ```go
 // NewTxOutput create a new output struct
 func NewTxOutput(assetID bc.AssetID, amount uint64, controlProgram []byte) *TxOutput {
@@ -212,8 +212,8 @@ func NewTxOutput(assetID bc.AssetID, amount uint64, controlProgram []byte) *TxOu
 }
 ```
 
-## 5.组合交易的input和output构成交易模板
-通过上面已经生成的交易信息构造交易`txbuilder.Template`，该部分功能可以参考[blockchain/txbuilder/builder.go#L96](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/builder.go#L96)进行改造为:
+## 5. Combine the input and output of a transaction to form a transaction template
+Construct a transaction `txbuilder.Template` from the transaction information already generated above, the function of this part can refer to [blockchain/txbuilder/builder.go#L96](https://github.com/EIYARO-Project/core/blob/ master/blockchain/txbuilder/builder.go#L96) to transform it to.
 ```go
 type InputAndSigInst struct {
 	input *types.TxInput
@@ -243,8 +243,8 @@ func BuildTx(inputs []InputAndSigInst, outputs []*types.TxOutput) (*Template, *t
 }
 ```
 
-## 6.对构造的交易进行签名
-账户模型是根据密码找到对应的私钥对交易进行签名，这里用户可以直接使用私钥对交易进行签名，可以参考签名代码[blockchain/txbuilder/txbuilder.go#L88](https://github.com/EIYARO-Project/core/blob/master/blockchain/txbuilder/txbuilder.go#L88)进行改造为:（以下改造仅支持单签交易，多签交易用户可以参照该示例进行改造）
+## 6. Signing the constructed transaction
+The account model is based on the password to find the corresponding private key to sign the transaction, here the user can directly use the private key to sign the transaction, you can refer to the signature code [blockchain/txbuilder/txbuilder.go#L88](https://github.com/EIYARO-Project/core /blob/master/blockchain/txbuilder/txbuilder.go#L88) is transformed into: (the following transformation only supports single-signature transactions, multi-signature transactions users can refer to the example for transformation)
 ```go
 // Sign will try to sign all the witness
 func Sign(tpl *Template, xprv chainkd.XPrv) error {
@@ -262,7 +262,7 @@ func Sign(tpl *Template, xprv chainkd.XPrv) error {
 }
 ```
 
-多签的方式可以参考以下修改：（xprvs需要跟签名的个数Quorum相同，另外注意一下多签的顺序）
+The multi-signature approach can be seen in the following modification: (xprvs needs to be the same as the number of signatures Quorum, also note the order of the multi-signatures)
 ```go
 func Sign(tpl *Template, xprvs []chainkd.XPrv) error {
 	for i, sigInst := range tpl.SigningInstructions {
@@ -286,5 +286,5 @@ func Sign(tpl *Template, xprvs []chainkd.XPrv) error {
 }
 ```
 
-## 7.提交交易上链
-该步骤无需更改任何内容，直接参照文档中提交交易的API[submit-transaction](https://github.com/EIYARO-Project/core/blob/master/blob/main/API-Reference.md#submit-transaction)的功能即可
+## 7. Submit transaction for uploading
+There is no need to change anything in this step, just refer to the API [submit-transaction](https://github.com/EIYARO-Project/core/blob/master/blob/main/API-Reference.md#) in the wiki for submitting transactions. submit-transaction) in the Doc.
